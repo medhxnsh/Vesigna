@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vesigna — Sign Language Translator</title>
+  <meta name="description" content="Real-time ASL sign language recognition and translation powered by MediaPipe Hands">
+
+  <link rel="icon" href="favicon.ico">
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Local styles -->
+  <link rel="stylesheet" href="hands.css">
+</head>
+
+<body>
+
+  <!-- ─── Loading Screen ─── -->
+  <div class="loading-screen" id="loadingScreen">
+    <div class="loading-content">
+      <div class="loading-logo">V</div>
+      <div class="loading-spinner"></div>
+      <div class="loading-text">Initializing camera &amp; hand tracking…</div>
+    </div>
+  </div>
+
+  <!-- ─── App Container ─── -->
+  <div class="app" id="app">
+
+    <!-- Header -->
+    <header class="header">
+      <div class="header-brand">
+        <span class="header-logo">✋</span>
+        <h1 class="header-title">Vesigna</h1>
+        <span class="header-badge">ASL</span>
+      </div>
+      <div class="header-actions">
+        <button class="btn" id="btnReference">📖 ASL Guide</button>
+      </div>
+      <div class="header-status" id="headerStatus">
+        <span class="status-dot"></span>
+        <span class="status-text">Detecting…</span>
+      </div>
+    </header>
+
+    <!-- Main content area -->
+    <main class="main">
+
+      <!-- Camera Feed -->
+      <div class="camera-container" id="cameraContainer">
+        <video class="input_video" id="inputVideo"></video>
+        <canvas class="output_canvas" id="outputCanvas" width="1280" height="720"></canvas>
+
+        <!-- Current letter overlay (big letter on camera) -->
+        <div class="detected-letter-overlay" id="detectedLetterOverlay">
+          <span class="detected-letter" id="detectedLetter">—</span>
+          <span class="detected-confidence" id="detectedConfidence"></span>
+        </div>
+
+        <!-- FPS counter -->
+        <div class="fps-counter" id="fpsCounter">-- FPS</div>
+
+        <!-- Debug overlay (togglable) -->
+        <div class="debug-panel" id="debugPanel">
+          <pre class="debug-content" id="debugContent">Debug data will appear here...</pre>
+        </div>
+      </div>
+
+      <!-- Translation Panel (right side) -->
+      <aside class="translation-panel">
+        <div class="panel-section">
+          <h2 class="panel-title">Detected Sign</h2>
+          <div class="current-sign" id="currentSign">
+            <span class="sign-letter" id="signLetter">—</span>
+            <span class="sign-label" id="signLabel">Show a sign to begin</span>
+          </div>
+        </div>
+
+        <div class="panel-divider"></div>
+
+        <div class="panel-section">
+          <h2 class="panel-title">Translation</h2>
+          <div class="translation-output" id="translationOutput">
+            <p class="translation-text" id="translationText">
+              <span class="cursor-blink">|</span>
+            </p>
+          </div>
+          <div class="translation-actions">
+            <button class="btn btn-clear" id="btnClear" title="Clear text">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+              </svg>
+              Clear
+            </button>
+            <button class="btn btn-copy" id="btnCopy" title="Copy to clipboard">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" />
+                <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+              </svg>
+              Copy
+            </button>
+            <button class="btn btn-debug" id="btnDebug" title="Toggle debug info">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 20h.01M8 16l-2 2M16 16l2 2M12 12V4M8 8l-4-4M16 8l4-4" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+              Debug
+            </button>
+          </div>
+        </div>
+
+        <div class="panel-divider"></div>
+
+        <div class="panel-section">
+          <h2 class="panel-title">How It Works</h2>
+          <div class="how-it-works">
+            <div class="step">
+              <span class="step-num">1</span>
+              <span>Hold an ASL letter sign</span>
+            </div>
+            <div class="step">
+              <span class="step-num">2</span>
+              <span>Keep it steady for ~1 second</span>
+            </div>
+            <div class="step">
+              <span class="step-num">3</span>
+              <span>Letter appears in translation</span>
+            </div>
+            <div class="step">
+              <span class="step-num">4</span>
+              <span>Open palm = space between words</span>
+            </div>
+            <div class="step">
+              <span class="step-num">5</span>
+              <span>Draw Z or J in the air for those letters</span>
+            </div>
+            <div class="step">
+              <span class="step-num">6</span>
+              <span>Swipe flat hand left = delete last letter</span>
+            </div>
+            <div class="step">
+              <span class="step-num">7</span>
+              <span>Tap word suggestions to autocomplete</span>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <!-- Main logic -->
+  <script type="module" src="hands.js"></script>
+</body>
+
+</html>
