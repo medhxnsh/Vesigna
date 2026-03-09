@@ -231,12 +231,13 @@ function buildCollectOverlay() {
                 background: rgba(10,10,20,0.88);
                 border: 1px solid rgba(108,92,231,0.4);
                 border-radius: 16px;
-                padding: 18px 24px 14px;
+                padding: 18px 28px 16px;
                 display: flex;
                 flex-direction: column;
                 align-items: center;
                 gap: 10px;
-                min-width: 320px;
+                min-width: 480px;
+                max-width: 90%;
                 box-shadow: 0 8px 40px rgba(0,0,0,0.6);
             }
             .collect-letter {
@@ -268,9 +269,10 @@ function buildCollectOverlay() {
             .collect-actions {
                 display: flex;
                 gap: 8px;
-                margin-top: 2px;
+                margin-top: 12px;
                 flex-wrap: wrap;
                 justify-content: center;
+                width: 100%;
             }
             .collect-hint {
                 font-family: var(--font,'Inter',sans-serif);
@@ -339,9 +341,10 @@ function buildCollectOverlay() {
     btnClose.textContent = '✕ Close';
     btnClose.addEventListener('click', () => stopCollectMode());
 
-    actions.appendChild(btnNext);
+    // Order: ↩ Redo | ⌫ Last | ⏭ Next | 💾 Download | ✕ Close
     actions.appendChild(btnRedo);
     actions.appendChild(btnDeleteLast);
+    actions.appendChild(btnNext);
     actions.appendChild(btnDownload);
     actions.appendChild(btnClose);
 
