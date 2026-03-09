@@ -1,37 +1,49 @@
 /**
- * hands.js — Vesigna v4
- * Uses MediaPipe Tasks Vision GestureRecognizer (ESM import)
+ * hands.js — Vesigna v6
+ * Uses TensorFlow.js (tfjs@3.21) + MediaPipe Hands for ASL recognition.
+ * Model: ./model/model.json — 42 inputs (21 landmarks × x,y), 26 outputs (A-Z).
+ * GestureStabilizer, SentenceBuilder, getSuggestions injected as window globals
+ * by gesture.js.  showReferenceModal injected by asl-reference.js.
  */
 
-import { GestureRecognizer, FilesetResolver, DrawingUtils }
-    from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/vision_bundle.mjs';
+// ─── ASL class labels (index 0 = A … 25 = Z) ─────────────────────────
+const LABELS = [
+    'A','B','C','D','E','F','G','H','I','J','K','L','M',
+    'N','O','P','Q','R','S','T','U','V','W','X','Y','Z',
+];
 
-import { GestureStabilizer, SentenceBuilder, getSuggestions } from './gesture.js';
-import { showReferenceModal } from './asl-reference.js';
+// ─── Mish activation (not natively supported by tfjs) ────────────────
+
+function mish(x) {
+    return tf.tidy(() => {
+        const softplus = tf.log(tf.add(tf.exp(x), tf.scalar(1)));
+        return tf.mul(x, tf.tanh(softplus));
+    });
+}
 
 // ─── DOM elements ────────────────────────────────────────────────────
 
-const videoElement  = document.getElementById('inputVideo');
+const videoElement = document.getElementById('inputVideo');
 const canvasElement = document.getElementById('outputCanvas');
-const canvasCtx     = canvasElement.getContext('2d');
+const canvasCtx = canvasElement.getContext('2d');
 
-const loadingScreen        = document.getElementById('loadingScreen');
-const appContainer         = document.getElementById('app');
+const loadingScreen = document.getElementById('loadingScreen');
+const appContainer = document.getElementById('app');
 const detectedLetterOverlay = document.getElementById('detectedLetterOverlay');
-const detectedLetterEl     = document.getElementById('detectedLetter');
+const detectedLetterEl = document.getElementById('detectedLetter');
 const detectedConfidenceEl = document.getElementById('detectedConfidence');
-const signLetterEl         = document.getElementById('signLetter');
-const signLabelEl          = document.getElementById('signLabel');
-const currentSignEl        = document.querySelector('.current-sign');
-const translationTextEl    = document.getElementById('translationText');
-const headerStatusEl       = document.getElementById('headerStatus');
-const statusTextEl         = headerStatusEl.querySelector('.status-text');
-const fpsCounterEl         = document.getElementById('fpsCounter');
-const btnClear             = document.getElementById('btnClear');
-const btnCopy              = document.getElementById('btnCopy');
-const btnDebug             = document.getElementById('btnDebug');
-const debugPanel           = document.getElementById('debugPanel');
-const debugContent         = document.getElementById('debugContent');
+const signLetterEl = document.getElementById('signLetter');
+const signLabelEl = document.getElementById('signLabel');
+const currentSignEl = document.querySelector('.current-sign');
+const translationTextEl = document.getElementById('translationText');
+const headerStatusEl = document.getElementById('headerStatus');
+const statusTextEl = headerStatusEl.querySelector('.status-text');
+const fpsCounterEl = document.getElementById('fpsCounter');
+const btnClear = document.getElementById('btnClear');
+const btnCopy = document.getElementById('btnCopy');
+const btnDebug = document.getElementById('btnDebug');
+const debugPanel = document.getElementById('debugPanel');
+const debugContent = document.getElementById('debugContent');
 
 // ─── Progress bar element (injected below sign display) ──────────────
 
@@ -70,8 +82,7 @@ const translationOutput = document.getElementById('translationOutput');
 translationOutput.after(suggestionsEl);
 
 function renderSuggestions(currentText) {
-    // Get last partial word
-    const words  = currentText.trimEnd().split(' ');
+    const words = currentText.trimEnd().split(' ');
     const partial = words[words.length - 1];
     const suggestions = getSuggestions(partial, 4);
 
@@ -90,14 +101,9 @@ function renderSuggestions(currentText) {
             cursor: pointer;
             transition: all 0.15s ease;
         `;
-        btn.onmouseenter = () => {
-            btn.style.background = 'rgba(108,92,231,0.25)';
-        };
-        btn.onmouseleave = () => {
-            btn.style.background = 'rgba(108,92,231,0.12)';
-        };
+        btn.onmouseenter = () => { btn.style.background = 'rgba(108,92,231,0.25)'; };
+        btn.onmouseleave = () => { btn.style.background = 'rgba(108,92,231,0.12)'; };
         btn.addEventListener('click', () => {
-            // Replace the last partial word with the suggestion
             words[words.length - 1] = word;
             sentence.text = words.join(' ');
             sentence.onChange && sentence.onChange(sentence.text);
@@ -109,9 +115,10 @@ function renderSuggestions(currentText) {
 
 // ─── Gesture recognition pipeline ───────────────────────────────────
 
-const stabilizer = new GestureStabilizer(20, 30);
-const sentence   = new SentenceBuilder();
-let debugMode    = false;
+const stabilizer = new GestureStabilizer(15, 25);
+const sentence = new SentenceBuilder();
+let debugMode = false;
+let lastDetectedLetter = null;
 
 stabilizer.onLetterCommit = (letter) => {
     sentence.addLetter(letter);
@@ -146,7 +153,7 @@ function escapeHtml(str) {
 
 // ─── FPS tracking ─────────────────────────────────────────────────────
 
-let frameCount  = 0;
+let frameCount = 0;
 let lastFpsTime = performance.now();
 
 function updateFps() {
@@ -154,15 +161,15 @@ function updateFps() {
     const now = performance.now();
     if (now - lastFpsTime >= 1000) {
         fpsCounterEl.textContent = `${frameCount} FPS`;
-        frameCount  = 0;
+        frameCount = 0;
         lastFpsTime = now;
     }
 }
 
 // ─── Canvas sizing (letterbox 16:9) ──────────────────────────────────
 
-const VIDEO_W      = 1280;
-const VIDEO_H      = 720;
+const VIDEO_W = 1280;
+const VIDEO_H = 720;
 const VIDEO_ASPECT = VIDEO_W / VIDEO_H;
 
 function resizeCanvas() {
@@ -178,42 +185,291 @@ function resizeCanvas() {
         w = cw; h = cw / VIDEO_ASPECT;
     }
 
-    canvasElement.width  = w;
+    canvasElement.width = w;
     canvasElement.height = h;
 }
 
-// ─── Gesture mapping ─────────────────────────────────────────────────────────
+// ─── TF model (assigned in boot) ─────────────────────────────────────
 
-const IGNORE_GESTURES = new Set([
-    'Victory', 'ILoveYou', 'Thumb_Up', 'Thumb_Down', 'Closed_Fist', 'None', '',
-]);
-const LETTER_RE = /^[A-Z]$/;
+let model = null;
 
-function mapGesture(categoryName) {
-    if (!categoryName) return null;
-    if (categoryName === 'Open_Palm') return 'SPACE';
-    if (IGNORE_GESTURES.has(categoryName)) return null;
-    if (LETTER_RE.test(categoryName)) return categoryName;
-    return null;
+// ─── Live landmarks (updated each frame, used by data collector) ──────
+
+let currentRawLandmarks = null;
+
+// ─── Data Collection Mode ─────────────────────────────────────────────
+
+const COLLECT_LETTERS   = 'ABCDEFGHIKLMNOPQRSTUVWXY'.split(''); // A-Z minus J and Z
+const SAMPLES_PER_LETTER = 200;
+
+let collectMode    = false;
+let collectIndex   = 0;   // index into COLLECT_LETTERS
+let collectSamples = [];  // { label, values[] }[]
+let collectOverlay = null;
+
+function buildCollectOverlay() {
+    // Inject styles once
+    if (!document.getElementById('collect-styles')) {
+        const s = document.createElement('style');
+        s.id = 'collect-styles';
+        s.textContent = `
+            .collect-overlay {
+                position: absolute;
+                inset: 0;
+                z-index: 50;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: flex-end;
+                padding-bottom: 24px;
+                background: rgba(0,0,0,0.45);
+                backdrop-filter: blur(2px);
+                pointer-events: none;
+            }
+            .collect-panel {
+                pointer-events: all;
+                background: rgba(10,10,20,0.88);
+                border: 1px solid rgba(108,92,231,0.4);
+                border-radius: 16px;
+                padding: 18px 24px 14px;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 10px;
+                min-width: 320px;
+                box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+            }
+            .collect-letter {
+                font-family: var(--font,'Inter',sans-serif);
+                font-size: 52px;
+                font-weight: 800;
+                color: #a29bfe;
+                line-height: 1;
+                letter-spacing: -2px;
+            }
+            .collect-count {
+                font-family: var(--font,'Inter',sans-serif);
+                font-size: 13px;
+                color: #8888a0;
+            }
+            .collect-bar-wrap {
+                width: 100%;
+                height: 6px;
+                background: rgba(255,255,255,0.08);
+                border-radius: 3px;
+                overflow: hidden;
+            }
+            .collect-bar-fill {
+                height: 100%;
+                background: #6c5ce7;
+                border-radius: 3px;
+                transition: width 0.1s ease;
+            }
+            .collect-actions {
+                display: flex;
+                gap: 8px;
+                margin-top: 2px;
+            }
+            .collect-hint {
+                font-family: var(--font,'Inter',sans-serif);
+                font-size: 11px;
+                color: #55556a;
+            }
+        `;
+        document.head.appendChild(s);
+    }
+
+    const overlay = document.createElement('div');
+    overlay.className = 'collect-overlay';
+
+    const panel = document.createElement('div');
+    panel.className = 'collect-panel';
+
+    const letterEl = document.createElement('div');
+    letterEl.className = 'collect-letter';
+    letterEl.id = 'collectLetter';
+
+    const countEl = document.createElement('div');
+    countEl.className = 'collect-count';
+    countEl.id = 'collectCount';
+
+    const barWrap = document.createElement('div');
+    barWrap.className = 'collect-bar-wrap';
+    const barFill = document.createElement('div');
+    barFill.className = 'collect-bar-fill';
+    barFill.id = 'collectBarFill';
+    barWrap.appendChild(barFill);
+
+    const actions = document.createElement('div');
+    actions.className = 'collect-actions';
+
+    const btnNext = document.createElement('button');
+    btnNext.className = 'btn';
+    btnNext.textContent = '⏭ Next Letter';
+    btnNext.addEventListener('click', () => collectNextLetter());
+
+    const btnDownload = document.createElement('button');
+    btnDownload.className = 'btn';
+    btnDownload.textContent = '💾 Download CSV';
+    btnDownload.addEventListener('click', () => downloadCSV());
+
+    const btnClose = document.createElement('button');
+    btnClose.className = 'btn';
+    btnClose.textContent = '✕ Close';
+    btnClose.addEventListener('click', () => stopCollectMode());
+
+    actions.appendChild(btnNext);
+    actions.appendChild(btnDownload);
+    actions.appendChild(btnClose);
+
+    const hint = document.createElement('div');
+    hint.className = 'collect-hint';
+    hint.textContent = 'Press SPACE to record a sample';
+
+    panel.appendChild(letterEl);
+    panel.appendChild(countEl);
+    panel.appendChild(barWrap);
+    panel.appendChild(actions);
+    panel.appendChild(hint);
+    overlay.appendChild(panel);
+
+    return overlay;
 }
 
-// ─── GestureRecognizer state ──────────────────────────────────────────────────
+function collectCurrentLetterSamplesCount() {
+    const letter = COLLECT_LETTERS[collectIndex];
+    return collectSamples.filter(s => s.label === letter).length;
+}
 
-let gestureRecognizer = null;
-let lastTimestamp     = -1;
-let drawingUtil       = null;
+function updateCollectUI() {
+    const letter = COLLECT_LETTERS[collectIndex];
+    const count  = collectCurrentLetterSamplesCount();
+    document.getElementById('collectLetter').textContent = `Sign: ${letter}`;
+    document.getElementById('collectCount').textContent  = `Samples: ${count} / ${SAMPLES_PER_LETTER}`;
+    document.getElementById('collectBarFill').style.width = `${Math.min(count / SAMPLES_PER_LETTER * 100, 100)}%`;
+}
 
-// ─── Per-frame processing ─────────────────────────────────────────────────────
+function collectNextLetter() {
+    collectIndex = (collectIndex + 1) % COLLECT_LETTERS.length;
+    updateCollectUI();
+}
 
-function processFrame() {
-    requestAnimationFrame(processFrame);
+function recordSample() {
+    if (!currentRawLandmarks) { showToast('No hand detected'); return; }
+    const letter  = COLLECT_LETTERS[collectIndex];
+    const count   = collectCurrentLetterSamplesCount();
+    if (count >= SAMPLES_PER_LETTER) { showToast(`${letter} already has ${SAMPLES_PER_LETTER} samples`); return; }
 
-    // Must have a playing video and an initialised recognizer
-    if (!gestureRecognizer || videoElement.readyState < 2 || videoElement.paused) return;
+    const wrist = currentRawLandmarks[0];
+    const flat  = [];
+    for (let i = 0; i < 21; i++) {
+        flat.push(currentRawLandmarks[i].x - wrist.x);
+        flat.push(currentRawLandmarks[i].y - wrist.y);
+    }
+    const maxVal = Math.max(...flat.map(Math.abs)) || 1;
+    const values = flat.map(v => v / maxVal);
 
-    const now = Date.now();
-    if (now <= lastTimestamp) return;
-    lastTimestamp = now;
+    collectSamples.push({ label: letter, values });
+    updateCollectUI();
+    showToast(`${letter}: ${count + 1}/${SAMPLES_PER_LETTER}`);
+}
+
+function downloadCSV() {
+    if (collectSamples.length === 0) { showToast('No samples collected'); return; }
+    const header = ['label', ...Array.from({ length: 21 }, (_, i) => [`x${i}`, `y${i}`]).flat()].join(',');
+    const rows   = collectSamples.map(s => [s.label, ...s.values.map(v => v.toFixed(6))].join(','));
+    const csv    = [header, ...rows].join('\n');
+    const blob   = new Blob([csv], { type: 'text/csv' });
+    const url    = URL.createObjectURL(blob);
+    const a      = document.createElement('a');
+    a.href       = url;
+    a.download   = 'training_data.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast(`Downloaded ${collectSamples.length} samples`);
+}
+
+function startCollectMode() {
+    collectMode  = true;
+    collectIndex = 0;
+    if (!collectOverlay) {
+        collectOverlay = buildCollectOverlay();
+        document.getElementById('cameraContainer').appendChild(collectOverlay);
+    }
+    collectOverlay.style.display = 'flex';
+    updateCollectUI();
+    document.getElementById('btnCollect').classList.add('active');
+}
+
+function stopCollectMode() {
+    collectMode = false;
+    if (collectOverlay) collectOverlay.style.display = 'none';
+    document.getElementById('btnCollect').classList.remove('active');
+}
+
+// ─── Landmark normalisation + classification ──────────────────────────
+
+function classifyLandmarks(landmarks) {
+    const wrist = landmarks[0];
+    const flat = [];
+    for (let i = 0; i < 21; i++) {
+        flat.push(landmarks[i].x - wrist.x);
+        flat.push(landmarks[i].y - wrist.y);
+    }
+    const maxVal = Math.max(...flat.map(Math.abs)) || 1;
+    const normalized = flat.map(v => v / maxVal);
+
+    return tf.tidy(() => {
+        let x = tf.tensor2d([normalized]);
+
+        // Get weights by name
+        const weights = {};
+        for (const layer of model.layers) {
+            const w = layer.getWeights();
+            if (w.length > 0) weights[layer.name] = w;
+        }
+
+        // BatchNorm
+        const bn = weights['batch_normalization'] || weights['bn'];
+        if (bn) {
+            const [gamma, beta, mean, variance] = bn;
+            x = tf.add(
+                tf.mul(gamma, tf.div(tf.sub(x, mean), tf.sqrt(tf.add(variance, tf.scalar(0.001))))),
+                beta
+            );
+        }
+
+        // Dense 0 → mish
+        const d0 = weights['dense'] || weights['d0'];
+        if (d0) x = mish(tf.add(tf.matMul(x, d0[0]), d0[1]));
+
+        // Dense 1 → mish
+        const d1 = weights['dense_1'] || weights['d1'];
+        if (d1) x = mish(tf.add(tf.matMul(x, d1[0]), d1[1]));
+
+        // Dense 2 → mish
+        const d2 = weights['dense_2'] || weights['d2'];
+        if (d2) x = mish(tf.add(tf.matMul(x, d2[0]), d2[1]));
+
+        // Dense 3 → softmax
+        const d3 = weights['dense_3'] || weights['d3'];
+        if (d3) x = tf.softmax(tf.add(tf.matMul(x, d3[0]), d3[1]));
+
+        const values = x.dataSync();
+        const classIndex = values.indexOf(Math.max(...values));
+        const confidence = values[classIndex];
+
+        const LABELS = ['A','B','C','D','E','F','G','H','I','J','K','L','M',
+                        'N','O','P','Q','R','S','T','U','V','W','X','Y','Z'];
+
+        return { letter: LABELS[classIndex], confidence, allScores: Array.from(values) };
+    });
+}
+
+// ─── MediaPipe onResults callback ─────────────────────────────────────
+
+async function onResults(results) {
+    if (!model) return;
 
     updateFps();
     resizeCanvas();
@@ -221,138 +477,146 @@ function processFrame() {
     const W = canvasElement.width;
     const H = canvasElement.height;
 
-    // ── Draw video frame (mirrored for selfie) ────────────────────────────────
+    // Draw video frame, mirrored for selfie feel
     canvasCtx.save();
     canvasCtx.clearRect(0, 0, W, H);
     canvasCtx.translate(W, 0);
     canvasCtx.scale(-1, 1);
-    canvasCtx.drawImage(videoElement, 0, 0, W, H);
+    canvasCtx.drawImage(results.image, 0, 0, W, H);
+    canvasCtx.restore();
 
-    // ── Run GestureRecognizer ─────────────────────────────────────────────────
-    let result;
-    try {
-        result = gestureRecognizer.recognizeForVideo(videoElement, now);
-    } catch (e) {
-        canvasCtx.restore();
-        return;
-    }
+    const rawLandmarks = results.multiHandLandmarks && results.multiHandLandmarks[0];
+    currentRawLandmarks = rawLandmarks || null;
+    let classResult = null;
+    const rawLandmarkCount = rawLandmarks ? rawLandmarks.length : 0;
 
-    // ── Draw hand skeleton (inside mirrored context so it aligns with video) ──
-    const hands = result.landmarks ?? [];
-    if (hands.length > 0) {
-        if (!drawingUtil) drawingUtil = new DrawingUtils(canvasCtx);
-        drawingUtil.drawConnectors(
-            hands[0],
-            GestureRecognizer.HAND_CONNECTIONS,
-            { color: 'rgba(162, 155, 254, 0.6)', lineWidth: 2.5 },
-        );
-        drawingUtil.drawLandmarks(hands[0], {
+    if (rawLandmarks) {
+        // Flip x for drawing because the canvas is mirrored above
+        const drawLms = rawLandmarks.map(lm => ({ x: 1 - lm.x, y: lm.y, z: lm.z }));
+
+        drawConnectors(canvasCtx, drawLms, HAND_CONNECTIONS, {
+            color: 'rgba(162,155,254,0.6)',
+            lineWidth: 2.5,
+        });
+        drawLandmarks(canvasCtx, drawLms, {
             color: '#a29bfe',
             fillColor: '#6c5ce7',
             lineWidth: 1,
+            radius: 4,
         });
+
+        // Classify using the original (unflipped) landmarks; apply hysteresis
+        const raw = classifyLandmarks(rawLandmarks);
+        if (raw.confidence >= 0.5) {
+            lastDetectedLetter = raw.letter;
+            classResult = raw;
+        } else if (raw.confidence >= 0.35 && raw.letter === lastDetectedLetter) {
+            classResult = { ...raw, letter: lastDetectedLetter };
+        } else {
+            lastDetectedLetter = null;
+            classResult = { ...raw, letter: null };
+        }
     }
 
-    canvasCtx.restore();
+    // ─── Update UI overlays ────────────────────────────────────────────
+    if (classResult && classResult.letter) {
+        const { letter, confidence } = classResult;
+        const pct = (confidence * 100).toFixed(0) + '%';
 
-    // ── Classify gesture ──────────────────────────────────────────────────────
-    const gestures = result.gestures ?? [];
-    if (gestures.length > 0) {
-        const top    = gestures[0][0];
-        // DEBUG: bypass mapGesture — show raw model output directly
-        const raw    = top.categoryName;
-        const score  = (top.score * 100).toFixed(0) + '%';
-
-        // Show raw category in overlay unconditionally
         detectedLetterOverlay.classList.add('active');
-        detectedLetterEl.textContent     = raw;
-        detectedConfidenceEl.textContent = score;
-
-        signLetterEl.textContent = raw;
-        signLabelEl.textContent  = `Raw: ${raw}`;
+        detectedLetterEl.textContent = letter;
+        detectedConfidenceEl.textContent = pct;
+        signLetterEl.textContent = letter;
+        signLabelEl.textContent = pct;
         currentSignEl.classList.add('detected');
-        statusTextEl.textContent = `Raw: ${raw} (${score})`;
-
-        // Debug panel — show everything the model returned this frame
-        if (debugContent) {
-            const allGestures = gestures[0]
-                .slice(0, 5)
-                .map(g => `  ${g.categoryName.padEnd(20)} ${(g.score * 100).toFixed(1)}%`)
-                .join('\n');
-            const lms = hands[0];
-            debugContent.textContent =
-                `── RAW MODEL OUTPUT ──────────────\n` +
-                `Top:        ${raw}\n` +
-                `Score:      ${score}\n` +
-                `Hands det:  ${hands.length}\n` +
-                `\n── ALL CANDIDATES ───────────────\n` +
-                allGestures + '\n' +
-                `\n── LANDMARKS ────────────────────\n` +
-                (lms ? `Index tip:  x=${lms[8].x.toFixed(3)}  y=${lms[8].y.toFixed(3)}\n` : 'no landmarks\n') +
-                (lms ? `Pinky tip:  x=${lms[20].x.toFixed(3)}  y=${lms[20].y.toFixed(3)}\n` : '') +
-                `\n── STABILIZER ───────────────────\n` +
-                `Frames:     ${stabilizer.frameCount}/${stabilizer.requiredFrames}`;
-            debugPanel?.classList.add('visible');
-        }
-
+        statusTextEl.textContent = `${letter} (${pct})`;
     } else {
         detectedLetterOverlay.classList.remove('active');
-        signLetterEl.textContent = '\u2014';
-        signLabelEl.textContent  = 'Show a sign to begin';
+        signLetterEl.textContent = '—';
+        signLabelEl.textContent = 'Show a sign to begin';
         currentSignEl.classList.remove('detected');
-        statusTextEl.textContent = 'No hand detected';
-
-        stabilizer.update({ letter: null, confidence: 'none' });
-        if (debugContent) {
-            debugContent.textContent =
-                `── RAW MODEL OUTPUT ──────────────\n` +
-                `Top:        (none)\n` +
-                `Hands det:  ${hands.length}\n` +
-                `\nNo gestures returned this frame.`;
-            debugPanel?.classList.add('visible');
-        }
+        statusTextEl.textContent = 'Detecting…';
     }
+
+    // ─── Debug panel ───────────────────────────────────────────────────
+    if (debugContent) {
+        const _top3Str = classResult && classResult.allScores
+            ? (() => {
+                const _L = ['A','B','C','D','E','F','G','H','I','J','K','L','M',
+                            'N','O','P','Q','R','S','T','U','V','W','X','Y','Z'];
+                return classResult.allScores
+                    .map((v, i) => ({ letter: _L[i], score: v }))
+                    .sort((a, b) => b.score - a.score)
+                    .slice(0, 3)
+                    .map(t => `  ${t.letter}: ${(t.score * 100).toFixed(0)}%`)
+                    .join('\n');
+            })()
+            : '  (no detection)';
+
+        debugContent.textContent =
+            `── TF MODEL (A-Z) ───────────────\n` +
+            `Predicted:  ${classResult?.letter ?? '—'}\n` +
+            `Confidence: ${classResult ? (classResult.confidence * 100).toFixed(1) + '%' : '—'}\n` +
+            `Threshold:  50% / hysteresis 35%\n` +
+            `\n── TOP 3 PREDICTIONS ────────────\n` +
+            _top3Str + '\n' +
+            `\n── LANDMARKS ────────────────────\n` +
+            `Raw count:  ${rawLandmarkCount}\n` +
+            `\n── STABILIZER ───────────────────\n` +
+            `Frames:     ${stabilizer.frameCount}/${stabilizer.requiredFrames}`;
+
+        if (debugMode) debugPanel?.classList.add('visible');
+    }
+
+    // ─── Feed stabilizer → sentence builder ───────────────────────────
+    stabilizer.update({
+        letter: classResult ? classResult.letter : null,
+        confidence: classResult ? 'high' : 'none',
+    });
+
+    // ─── Sync reference modal highlight ───────────────────────────────
+    if (window.updateReferenceHighlight) window.updateReferenceHighlight(classResult ? classResult.letter : null);
 }
 
-// ─── Boot ─────────────────────────────────────────────────────────────────────
+// ─── Boot ─────────────────────────────────────────────────────────────
 
 (async () => {
+    const loadingText = document.querySelector('.loading-text');
     try {
-        const fileset = await FilesetResolver.forVisionTasks(
-            'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/wasm',
-        );
-        gestureRecognizer = await GestureRecognizer.createFromOptions(fileset, {
-            baseOptions: {
-                modelAssetPath:
-                    'https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task',
-                delegate: 'GPU',
+        // 1. Start loading the TF model immediately
+        const modelPromise = tf.loadLayersModel('./model/model.json');
+
+        // 2. Set up MediaPipe Hands
+        const hands = new Hands({
+            locateFile: (file) =>
+                `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
+        });
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.7,
+            minTrackingConfidence: 0.5,
+        });
+        hands.onResults(onResults);
+
+        // 3. Set up Camera utility (starts the webcam stream)
+        const camera = new Camera(videoElement, {
+            onFrame: async () => {
+                await hands.send({ image: videoElement });
             },
-            runningMode: 'VIDEO',
-            numHands: 1,
+            width: VIDEO_W,
+            height: VIDEO_H,
         });
 
-        const stream = await navigator.mediaDevices.getUserMedia({
-            video: { width: VIDEO_W, height: VIDEO_H, facingMode: 'user' },
-            audio: false,
-        });
-        videoElement.srcObject = stream;
-        videoElement.style.display = 'block';
-        videoElement.style.position = 'absolute';
-        videoElement.style.opacity = '0';
-        videoElement.style.pointerEvents = 'none';
+        // 4. Wait for both the TF model AND the camera/video to be ready
+        [model] = await Promise.all([modelPromise, camera.start()]);
 
-        await new Promise((resolve) => { videoElement.onloadeddata = resolve; });
-        await videoElement.play();
-
-        // Both recognizer and video are ready — reveal the app now
+        // Both ready — reveal the app
         loadingScreen.classList.add('hidden');
         appContainer.classList.add('visible');
-
-        requestAnimationFrame(processFrame);
     } catch (err) {
         console.error('Vesigna init error:', err);
-        const txt = document.querySelector('.loading-text');
-        if (txt) txt.textContent = `Init failed: ${err.message}`;
+        if (loadingText) loadingText.textContent = `Load failed: ${err.message}`;
     }
 })();
 
@@ -386,6 +650,14 @@ if (btnReference) {
     btnReference.addEventListener('click', () => showReferenceModal());
 }
 
+const btnCollect = document.getElementById('btnCollect');
+if (btnCollect) {
+    btnCollect.addEventListener('click', () => {
+        if (collectMode) stopCollectMode();
+        else startCollectMode();
+    });
+}
+
 // ─── Keyboard shortcuts ───────────────────────────────────────────────
 
 document.addEventListener('keydown', (e) => {
@@ -400,8 +672,12 @@ document.addEventListener('keydown', (e) => {
     }
     if (e.key === ' ' && document.activeElement === document.body) {
         e.preventDefault();
-        sentence.addLetter('SPACE');
-        sentence.onChange && sentence.onChange(sentence.getText());
+        if (collectMode) {
+            recordSample();
+        } else {
+            sentence.addLetter('SPACE');
+            sentence.onChange && sentence.onChange(sentence.getText());
+        }
     }
 });
 
@@ -412,7 +688,7 @@ function showToast(message) {
     if (existing) existing.remove();
 
     const toast = document.createElement('div');
-    toast.className   = 'toast';
+    toast.className = 'toast';
     toast.textContent = message;
     document.body.appendChild(toast);
 

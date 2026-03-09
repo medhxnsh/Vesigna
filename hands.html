@@ -41,6 +41,7 @@
       </div>
       <div class="header-actions">
         <button class="btn" id="btnReference">📖 ASL Guide</button>
+        <button class="btn" id="btnCollect">⏺ Collect Data</button>
       </div>
       <div class="header-status" id="headerStatus">
         <span class="status-dot"></span>
@@ -153,8 +154,13 @@
     </main>
   </div>
 
-  <!-- Main logic -->
-  <script type="module" src="hands.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+  <script src="gesture.js"></script>
+  <script src="asl-reference.js"></script>
+  <script src="hands.js"></script>
 </body>
 
 </html>

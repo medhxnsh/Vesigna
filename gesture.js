@@ -55,65 +55,65 @@ function extractFeatures(lm) {
     const palmSize = dist(lm[LM.WRIST], lm[LM.MIDDLE_MCP]);
 
     // Position-based extension: tip above PIP joint (lower y = higher on screen)
-    const indexTipAbovePIP  = lm[LM.INDEX_TIP].y  < lm[LM.INDEX_PIP].y;
+    const indexTipAbovePIP = lm[LM.INDEX_TIP].y < lm[LM.INDEX_PIP].y;
     const middleTipAbovePIP = lm[LM.MIDDLE_TIP].y < lm[LM.MIDDLE_PIP].y;
-    const ringTipAbovePIP   = lm[LM.RING_TIP].y   < lm[LM.RING_PIP].y;
-    const pinkyTipAbovePIP  = lm[LM.PINKY_TIP].y  < lm[LM.PINKY_PIP].y;
+    const ringTipAbovePIP = lm[LM.RING_TIP].y < lm[LM.RING_PIP].y;
+    const pinkyTipAbovePIP = lm[LM.PINKY_TIP].y < lm[LM.PINKY_PIP].y;
 
     // Tip-to-MCP distance ratios
-    const indexCurl  = dist(lm[LM.INDEX_TIP],  lm[LM.INDEX_MCP])  / palmSize;
+    const indexCurl = dist(lm[LM.INDEX_TIP], lm[LM.INDEX_MCP]) / palmSize;
     const middleCurl = dist(lm[LM.MIDDLE_TIP], lm[LM.MIDDLE_MCP]) / palmSize;
-    const ringCurl   = dist(lm[LM.RING_TIP],   lm[LM.RING_MCP])   / palmSize;
-    const pinkyCurl  = dist(lm[LM.PINKY_TIP],  lm[LM.PINKY_MCP])  / palmSize;
-    const thumbCurl  = dist(lm[LM.THUMB_TIP],  lm[LM.THUMB_CMC])  / palmSize;
+    const ringCurl = dist(lm[LM.RING_TIP], lm[LM.RING_MCP]) / palmSize;
+    const pinkyCurl = dist(lm[LM.PINKY_TIP], lm[LM.PINKY_MCP]) / palmSize;
+    const thumbCurl = dist(lm[LM.THUMB_TIP], lm[LM.THUMB_CMC]) / palmSize;
 
-    const EXT_RATIO  = 1.1;
+    const EXT_RATIO = 1.1;
     const CURL_RATIO = 0.9;
 
-    const indexExtended  = indexTipAbovePIP  && indexCurl  > EXT_RATIO;
+    const indexExtended = indexTipAbovePIP && indexCurl > EXT_RATIO;
     const middleExtended = middleTipAbovePIP && middleCurl > EXT_RATIO;
-    const ringExtended   = ringTipAbovePIP   && ringCurl   > EXT_RATIO;
-    const pinkyExtended  = pinkyTipAbovePIP  && pinkyCurl  > EXT_RATIO;
+    const ringExtended = ringTipAbovePIP && ringCurl > EXT_RATIO;
+    const pinkyExtended = pinkyTipAbovePIP && pinkyCurl > EXT_RATIO;
 
-    const indexCurled  = !indexTipAbovePIP  && indexCurl  < CURL_RATIO;
+    const indexCurled = !indexTipAbovePIP && indexCurl < CURL_RATIO;
     const middleCurled = !middleTipAbovePIP && middleCurl < CURL_RATIO;
-    const ringCurled   = !ringTipAbovePIP   && ringCurl   < CURL_RATIO;
-    const pinkyCurled  = !pinkyTipAbovePIP  && pinkyCurl  < CURL_RATIO;
+    const ringCurled = !ringTipAbovePIP && ringCurl < CURL_RATIO;
+    const pinkyCurled = !pinkyTipAbovePIP && pinkyCurl < CURL_RATIO;
 
     // Thumb — lateral anatomy, not vertical
     const thumbTipToIndexBase = dist(lm[LM.THUMB_TIP], lm[LM.INDEX_MCP]) / palmSize;
     const thumbExtended = thumbCurl > 1.0 && thumbTipToIndexBase > 0.6;
-    const thumbCurled   = thumbCurl < 0.7;
+    const thumbCurled = thumbCurl < 0.7;
 
     // Inter-finger distances
-    const indexMiddleDist = dist(lm[LM.INDEX_TIP],  lm[LM.MIDDLE_TIP]) / palmSize;
-    const middleRingDist  = dist(lm[LM.MIDDLE_TIP], lm[LM.RING_TIP])   / palmSize;
-    const ringPinkyDist   = dist(lm[LM.RING_TIP],   lm[LM.PINKY_TIP])  / palmSize;
-    const indexPinkyDist  = dist(lm[LM.INDEX_TIP],  lm[LM.PINKY_TIP])  / palmSize;
+    const indexMiddleDist = dist(lm[LM.INDEX_TIP], lm[LM.MIDDLE_TIP]) / palmSize;
+    const middleRingDist = dist(lm[LM.MIDDLE_TIP], lm[LM.RING_TIP]) / palmSize;
+    const ringPinkyDist = dist(lm[LM.RING_TIP], lm[LM.PINKY_TIP]) / palmSize;
+    const indexPinkyDist = dist(lm[LM.INDEX_TIP], lm[LM.PINKY_TIP]) / palmSize;
 
     // Thumb-to-finger distances
-    const thumbTipToIndexMCP  = dist(lm[LM.THUMB_TIP], lm[LM.INDEX_MCP])  / palmSize;
+    const thumbTipToIndexMCP = dist(lm[LM.THUMB_TIP], lm[LM.INDEX_MCP]) / palmSize;
     const thumbTipToMiddleMCP = dist(lm[LM.THUMB_TIP], lm[LM.MIDDLE_MCP]) / palmSize;
-    const thumbTipToIndexTip  = dist(lm[LM.THUMB_TIP], lm[LM.INDEX_TIP])  / palmSize;
+    const thumbTipToIndexTip = dist(lm[LM.THUMB_TIP], lm[LM.INDEX_TIP]) / palmSize;
     const thumbTipToMiddleTip = dist(lm[LM.THUMB_TIP], lm[LM.MIDDLE_TIP]) / palmSize;
-    const thumbTipToRingTip   = dist(lm[LM.THUMB_TIP], lm[LM.RING_TIP])   / palmSize;
-    const thumbTipToPinkyTip  = dist(lm[LM.THUMB_TIP], lm[LM.PINKY_TIP])  / palmSize;
-    const thumbTipToIndexDIP  = dist(lm[LM.THUMB_TIP], lm[LM.INDEX_DIP])  / palmSize;
+    const thumbTipToRingTip = dist(lm[LM.THUMB_TIP], lm[LM.RING_TIP]) / palmSize;
+    const thumbTipToPinkyTip = dist(lm[LM.THUMB_TIP], lm[LM.PINKY_TIP]) / palmSize;
+    const thumbTipToIndexDIP = dist(lm[LM.THUMB_TIP], lm[LM.INDEX_DIP]) / palmSize;
     const thumbTipToMiddlePIP = dist(lm[LM.THUMB_TIP], lm[LM.MIDDLE_PIP]) / palmSize;
 
     // Touch detection
-    const TOUCH_THRESH      = 0.45;
-    const indexTouchesThumb  = thumbTipToIndexTip  < TOUCH_THRESH;
+    const TOUCH_THRESH = 0.45;
+    const indexTouchesThumb = thumbTipToIndexTip < TOUCH_THRESH;
     const middleTouchesThumb = thumbTipToMiddleTip < TOUCH_THRESH;
-    const ringTouchesThumb   = thumbTipToRingTip   < TOUCH_THRESH;
-    const pinkyTouchesThumb  = thumbTipToPinkyTip  < TOUCH_THRESH;
+    const ringTouchesThumb = thumbTipToRingTip < TOUCH_THRESH;
+    const pinkyTouchesThumb = thumbTipToPinkyTip < TOUCH_THRESH;
 
     // Extended count
     const extendedCount = [indexExtended, middleExtended, ringExtended, pinkyExtended]
         .filter(Boolean).length + (thumbExtended ? 1 : 0);
 
     // PIP bend angles
-    const indexPIPAngle  = angleBetween(lm[LM.INDEX_MCP],  lm[LM.INDEX_PIP],  lm[LM.INDEX_DIP]);
+    const indexPIPAngle = angleBetween(lm[LM.INDEX_MCP], lm[LM.INDEX_PIP], lm[LM.INDEX_DIP]);
     const middlePIPAngle = angleBetween(lm[LM.MIDDLE_MCP], lm[LM.MIDDLE_PIP], lm[LM.MIDDLE_DIP]);
 
     // DIP/tip positions for hooked fingers
@@ -121,13 +121,13 @@ function extractFeatures(lm) {
     const indexTipBelowDIP = lm[LM.INDEX_TIP].y > lm[LM.INDEX_DIP].y;
 
     // Finger pointing direction
-    const indexPointsUp   = (lm[LM.INDEX_MCP].y - lm[LM.INDEX_TIP].y) > 0.05;
+    const indexPointsUp = (lm[LM.INDEX_MCP].y - lm[LM.INDEX_TIP].y) > 0.05;
     const indexPointsSide = Math.abs(lm[LM.INDEX_TIP].x - lm[LM.INDEX_MCP].x) >
-                            Math.abs(lm[LM.INDEX_TIP].y - lm[LM.INDEX_MCP].y);
+        Math.abs(lm[LM.INDEX_TIP].y - lm[LM.INDEX_MCP].y);
     const indexPointsDown = lm[LM.INDEX_TIP].y > lm[LM.INDEX_MCP].y + 0.02;
 
     // Wrist-relative tip positions
-    const indexTipBelowWrist  = lm[LM.INDEX_TIP].y  > lm[LM.WRIST].y;
+    const indexTipBelowWrist = lm[LM.INDEX_TIP].y > lm[LM.WRIST].y;
     const middleTipBelowWrist = lm[LM.MIDDLE_TIP].y > lm[LM.WRIST].y;
 
     return {
@@ -154,7 +154,7 @@ function extractFeatures(lm) {
 // shadowing narrower ones. Test by holding real ASL shapes.
 
 function classifyASL(landmarks) {
-    const f  = extractFeatures(landmarks);
+    const f = extractFeatures(landmarks);
     const lm = landmarks;
 
     // ── 5-finger open palm ──────────────────────────────────────────
@@ -331,10 +331,10 @@ function classifyASL(landmarks) {
 
 class MotionTracker {
     constructor(bufferSize = 40) {
-        this.bufferSize      = bufferSize;
-        this.indexBuffer     = [];
-        this.pinkyBuffer     = [];
-        this.cooldown        = 0;
+        this.bufferSize = bufferSize;
+        this.indexBuffer = [];
+        this.pinkyBuffer = [];
+        this.cooldown = 0;
         this.COOLDOWN_FRAMES = 35;
     }
 
@@ -359,7 +359,7 @@ class MotionTracker {
         // Z: index finger extended only → trace Z shape
         if (features.indexExtended && features.middleCurled && features.ringCurled && features.pinkyCurled) {
             if (this._detectZ(this.indexBuffer)) {
-                this.cooldown    = this.COOLDOWN_FRAMES;
+                this.cooldown = this.COOLDOWN_FRAMES;
                 this.indexBuffer = [];
                 return { letter: 'Z', confidence: 'high', trail: [] };
             }
@@ -370,7 +370,7 @@ class MotionTracker {
         if (features.pinkyExtended && features.indexCurled && features.middleCurled && features.ringCurled
             && !features.thumbExtended) {
             if (this._detectJ(this.pinkyBuffer)) {
-                this.cooldown    = this.COOLDOWN_FRAMES;
+                this.cooldown = this.COOLDOWN_FRAMES;
                 this.pinkyBuffer = [];
                 return { letter: 'J', confidence: 'high', trail: [] };
             }
@@ -380,7 +380,7 @@ class MotionTracker {
         // BACKSPACE: flat hand, swipe left quickly
         if (features.indexExtended && features.middleExtended && features.ringExtended && features.pinkyExtended) {
             if (this._detectSwipeLeft(this.indexBuffer)) {
-                this.cooldown    = this.COOLDOWN_FRAMES;
+                this.cooldown = this.COOLDOWN_FRAMES;
                 this.indexBuffer = [];
                 return { letter: 'BACKSPACE', confidence: 'medium', trail: [] };
             }
@@ -393,10 +393,10 @@ class MotionTracker {
         const segs = this._getSegments(buffer);
         if (segs.length < 3) return false;
         for (let i = 0; i <= segs.length - 3; i++) {
-            const [s1, s2, s3] = [segs[i], segs[i+1], segs[i+2]];
+            const [s1, s2, s3] = [segs[i], segs[i + 1], segs[i + 2]];
             const ok =
                 s1.dx > 0 && Math.abs(s1.dx) > Math.abs(s1.dy) * 0.5 && Math.abs(s1.dx) > 0.025 &&
-                s2.dx < 0 && s2.dy > 0 && Math.sqrt(s2.dx**2 + s2.dy**2) > 0.025 &&
+                s2.dx < 0 && s2.dy > 0 && Math.sqrt(s2.dx ** 2 + s2.dy ** 2) > 0.025 &&
                 s3.dx > 0 && Math.abs(s3.dx) > Math.abs(s3.dy) * 0.5 && Math.abs(s3.dx) > 0.025;
             if (ok) return true;
         }
@@ -407,10 +407,10 @@ class MotionTracker {
         const segs = this._getSegments(buffer);
         if (segs.length < 2) return false;
         for (let i = 0; i <= segs.length - 2; i++) {
-            const [s1, s2] = [segs[i], segs[i+1]];
+            const [s1, s2] = [segs[i], segs[i + 1]];
             const ok =
                 s1.dy > 0 && Math.abs(s1.dy) > Math.abs(s1.dx) * 0.5 && Math.abs(s1.dy) > 0.025 &&
-                (s2.dx < 0 || s2.dy < 0) && Math.sqrt(s2.dx**2 + s2.dy**2) > 0.025;
+                (s2.dx < 0 || s2.dy < 0) && Math.sqrt(s2.dx ** 2 + s2.dy ** 2) > 0.025;
             if (ok) return true;
         }
         return false;
@@ -433,8 +433,8 @@ class MotionTracker {
         const deltas = [];
         for (let i = 1; i < sampled.length; i++) {
             deltas.push({
-                dx: sampled[i].x - sampled[i-1].x,
-                dy: sampled[i].y - sampled[i-1].y,
+                dx: sampled[i].x - sampled[i - 1].x,
+                dy: sampled[i].y - sampled[i - 1].y,
             });
         }
 
@@ -443,8 +443,8 @@ class MotionTracker {
         for (let i = 1; i < deltas.length; i++) {
             const d = deltas[i];
             const dot = cur.dx * d.dx + cur.dy * d.dy;
-            const m1  = Math.sqrt(cur.dx**2 + cur.dy**2);
-            const m2  = Math.sqrt(d.dx**2 + d.dy**2);
+            const m1 = Math.sqrt(cur.dx ** 2 + cur.dy ** 2);
+            const m2 = Math.sqrt(d.dx ** 2 + d.dy ** 2);
             if (m1 > 0 && m2 > 0 && dot / (m1 * m2) > 0.3) {
                 cur.dx += d.dx; cur.dy += d.dy;
             } else {
@@ -459,7 +459,7 @@ class MotionTracker {
     reset() {
         this.indexBuffer = [];
         this.pinkyBuffer = [];
-        this.cooldown    = 0;
+        this.cooldown = 0;
     }
 }
 
@@ -467,14 +467,14 @@ class MotionTracker {
 
 class GestureStabilizer {
     constructor(requiredFrames = 12, cooldownFrames = 20) {
-        this.requiredFrames  = requiredFrames;
-        this.cooldownFrames  = cooldownFrames;
-        this.currentLetter   = null;
-        this.frameCount      = 0;
+        this.requiredFrames = requiredFrames;
+        this.cooldownFrames = cooldownFrames;
+        this.currentLetter = null;
+        this.frameCount = 0;
         this.cooldownCounter = 0;
-        this.lastCommitted   = null;
-        this.onLetterCommit  = null;
-        this.onProgress      = null; // (progress: 0-1, letter: string|null) => void
+        this.lastCommitted = null;
+        this.onLetterCommit = null;
+        this.onProgress = null; // (progress: 0-1, letter: string|null) => void
     }
 
     update(result) {
@@ -485,7 +485,7 @@ class GestureStabilizer {
 
         if (!result.letter || result.confidence === 'none') {
             this.currentLetter = null;
-            this.frameCount    = 0;
+            this.frameCount = 0;
             if (this.onProgress) this.onProgress(0, null);
             return null;
         }
@@ -494,15 +494,15 @@ class GestureStabilizer {
             this.frameCount++;
         } else {
             this.currentLetter = result.letter;
-            this.frameCount    = 1;
+            this.frameCount = 1;
         }
 
         const progress = Math.min(this.frameCount / this.requiredFrames, 1);
         if (this.onProgress) this.onProgress(progress, this.currentLetter);
 
         if (this.frameCount >= this.requiredFrames) {
-            this.lastCommitted   = this.currentLetter;
-            this.frameCount      = 0;
+            this.lastCommitted = this.currentLetter;
+            this.frameCount = 0;
             this.cooldownCounter = this.cooldownFrames;
             if (this.onLetterCommit) this.onLetterCommit(this.lastCommitted);
             return this.lastCommitted;
@@ -512,10 +512,10 @@ class GestureStabilizer {
     }
 
     reset() {
-        this.currentLetter   = null;
-        this.frameCount      = 0;
+        this.currentLetter = null;
+        this.frameCount = 0;
         this.cooldownCounter = 0;
-        this.lastCommitted   = null;
+        this.lastCommitted = null;
         if (this.onProgress) this.onProgress(0, null);
     }
 }
@@ -524,7 +524,7 @@ class GestureStabilizer {
 
 class SentenceBuilder {
     constructor() {
-        this.text     = '';
+        this.text = '';
         this.onChange = null;
     }
 
@@ -550,21 +550,21 @@ class SentenceBuilder {
 // ─── Word suggestion engine ───────────────────────────────────────────
 
 const WORD_LIST = [
-    'ABOUT','ABOVE','AFTER','AGAIN','ALSO','ALWAYS','AND','ANOTHER','ANY','ARE',
-    'AROUND','ASL','AWAY','BACK','BECAUSE','BEEN','BEFORE','BOTH','BUT','BY',
-    'CALL','CAN','COME','COULD','DIFFERENT','DO','DOES','DONE','DOWN','EACH',
-    'EVEN','EVERY','FEEL','FIND','FIRST','FOR','FROM','GET','GIVE','GO',
-    'GOOD','GREAT','HAND','HAPPY','HAVE','HE','HELLO','HELP','HER','HERE',
-    'HIM','HIS','HOW','IF','IN','INTO','IS','IT','ITS','JUST','KNOW',
-    'LEARN','LIKE','LITTLE','LOOK','LOVE','MAKE','MANY','ME','MORE','MOST',
-    'MY','NAME','NEW','NO','NOT','NOW','OF','OFF','ON','ONE','ONLY','OR',
-    'OTHER','OUR','OUT','OVER','OWN','PEOPLE','PLACE','PRACTICE','PUT','REALLY',
-    'SAME','SAY','SEE','SHE','SHOULD','SIGN','SINCE','SOME','SOMETHING',
-    'STILL','STUDY','SUCH','TAKE','THANK','THAT','THE','THEIR','THEM',
-    'THEN','THERE','THESE','THEY','THINK','THIS','THOSE','THROUGH','TIME',
-    'TO','TODAY','TOO','UNDER','UP','USE','VERY','WANT','WAS','WAY','WE',
-    'WELL','WERE','WHAT','WHEN','WHERE','WHICH','WHO','WILL','WITH','WORD',
-    'WORLD','WOULD','YEAR','YOU','YOUR',
+    'ABOUT', 'ABOVE', 'AFTER', 'AGAIN', 'ALSO', 'ALWAYS', 'AND', 'ANOTHER', 'ANY', 'ARE',
+    'AROUND', 'ASL', 'AWAY', 'BACK', 'BECAUSE', 'BEEN', 'BEFORE', 'BOTH', 'BUT', 'BY',
+    'CALL', 'CAN', 'COME', 'COULD', 'DIFFERENT', 'DO', 'DOES', 'DONE', 'DOWN', 'EACH',
+    'EVEN', 'EVERY', 'FEEL', 'FIND', 'FIRST', 'FOR', 'FROM', 'GET', 'GIVE', 'GO',
+    'GOOD', 'GREAT', 'HAND', 'HAPPY', 'HAVE', 'HE', 'HELLO', 'HELP', 'HER', 'HERE',
+    'HIM', 'HIS', 'HOW', 'IF', 'IN', 'INTO', 'IS', 'IT', 'ITS', 'JUST', 'KNOW',
+    'LEARN', 'LIKE', 'LITTLE', 'LOOK', 'LOVE', 'MAKE', 'MANY', 'ME', 'MORE', 'MOST',
+    'MY', 'NAME', 'NEW', 'NO', 'NOT', 'NOW', 'OF', 'OFF', 'ON', 'ONE', 'ONLY', 'OR',
+    'OTHER', 'OUR', 'OUT', 'OVER', 'OWN', 'PEOPLE', 'PLACE', 'PRACTICE', 'PUT', 'REALLY',
+    'SAME', 'SAY', 'SEE', 'SHE', 'SHOULD', 'SIGN', 'SINCE', 'SOME', 'SOMETHING',
+    'STILL', 'STUDY', 'SUCH', 'TAKE', 'THANK', 'THAT', 'THE', 'THEIR', 'THEM',
+    'THEN', 'THERE', 'THESE', 'THEY', 'THINK', 'THIS', 'THOSE', 'THROUGH', 'TIME',
+    'TO', 'TODAY', 'TOO', 'UNDER', 'UP', 'USE', 'VERY', 'WANT', 'WAS', 'WAY', 'WE',
+    'WELL', 'WERE', 'WHAT', 'WHEN', 'WHERE', 'WHICH', 'WHO', 'WILL', 'WITH', 'WORD',
+    'WORLD', 'WOULD', 'YEAR', 'YOU', 'YOUR',
 ];
 
 /**
@@ -578,6 +578,8 @@ function getSuggestions(prefix, limit = 4) {
     return WORD_LIST.filter(w => w.startsWith(upper)).slice(0, limit);
 }
 
-// ─── Exports ──────────────────────────────────────────────────────────
+// ─── Exports (window globals for plain-script loading) ─────────────────
 
-export { classifyASL, extractFeatures, GestureStabilizer, SentenceBuilder, MotionTracker, getSuggestions, LM };
+window.GestureStabilizer = GestureStabilizer;
+window.SentenceBuilder = SentenceBuilder;
+window.getSuggestions = getSuggestions;
