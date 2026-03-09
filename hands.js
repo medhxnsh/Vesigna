@@ -8,8 +8,8 @@
 
 // ─── ASL class labels (index 0 = A … 25 = Z) ─────────────────────────
 const LABELS = [
-    'A','B','C','D','E','F','G','H','I','J','K','L','M',
-    'N','O','P','Q','R','S','T','U','V','W','X','Y','Z',
+    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+    'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
 ];
 
 // ─── Mish activation (not natively supported by tfjs) ────────────────
@@ -199,11 +199,11 @@ let currentRawLandmarks = null;
 
 // ─── Data Collection Mode ─────────────────────────────────────────────
 
-const COLLECT_LETTERS   = 'ABCDEFGHIKLMNOPQRSTUVWXY'.split(''); // A-Z minus J and Z
+const COLLECT_LETTERS = 'ABCDEFGHIKLMNOPQRSTUVWXY'.split(''); // A-Z minus J and Z
 const SAMPLES_PER_LETTER = 200;
 
-let collectMode    = false;
-let collectIndex   = 0;   // index into COLLECT_LETTERS
+let collectMode = false;
+let collectIndex = 0;   // index into COLLECT_LETTERS
 let collectSamples = [];  // { label, values[] }[]
 let collectOverlay = null;
 
@@ -269,11 +269,20 @@ function buildCollectOverlay() {
                 display: flex;
                 gap: 8px;
                 margin-top: 2px;
+                flex-wrap: wrap;
+                justify-content: center;
             }
             .collect-hint {
                 font-family: var(--font,'Inter',sans-serif);
                 font-size: 11px;
                 color: #55556a;
+            }
+            .collect-flash {
+                animation: collectFlash 0.3s ease-out forwards;
+            }
+            @keyframes collectFlash {
+                0%   { box-shadow: 0 0 0 4px rgba(0,210,120,0.85); }
+                100% { box-shadow: 0 0 0 0   rgba(0,210,120,0); }
             }
         `;
         document.head.appendChild(s);
@@ -308,6 +317,18 @@ function buildCollectOverlay() {
     btnNext.textContent = '⏭ Next Letter';
     btnNext.addEventListener('click', () => collectNextLetter());
 
+    const btnRedo = document.createElement('button');
+    btnRedo.className = 'btn';
+    btnRedo.textContent = '↩ Redo';
+    btnRedo.title = 'Clear all samples for current letter';
+    btnRedo.addEventListener('click', () => redoCurrentLetter());
+
+    const btnDeleteLast = document.createElement('button');
+    btnDeleteLast.className = 'btn';
+    btnDeleteLast.textContent = '⌫ Delete Last';
+    btnDeleteLast.title = 'Remove the last recorded sample';
+    btnDeleteLast.addEventListener('click', () => deleteLastSample());
+
     const btnDownload = document.createElement('button');
     btnDownload.className = 'btn';
     btnDownload.textContent = '💾 Download CSV';
@@ -319,6 +340,8 @@ function buildCollectOverlay() {
     btnClose.addEventListener('click', () => stopCollectMode());
 
     actions.appendChild(btnNext);
+    actions.appendChild(btnRedo);
+    actions.appendChild(btnDeleteLast);
     actions.appendChild(btnDownload);
     actions.appendChild(btnClose);
 
@@ -343,9 +366,9 @@ function collectCurrentLetterSamplesCount() {
 
 function updateCollectUI() {
     const letter = COLLECT_LETTERS[collectIndex];
-    const count  = collectCurrentLetterSamplesCount();
+    const count = collectCurrentLetterSamplesCount();
     document.getElementById('collectLetter').textContent = `Sign: ${letter}`;
-    document.getElementById('collectCount').textContent  = `Samples: ${count} / ${SAMPLES_PER_LETTER}`;
+    document.getElementById('collectCount').textContent = `Samples: ${count} / ${SAMPLES_PER_LETTER}`;
     document.getElementById('collectBarFill').style.width = `${Math.min(count / SAMPLES_PER_LETTER * 100, 100)}%`;
 }
 
@@ -354,14 +377,45 @@ function collectNextLetter() {
     updateCollectUI();
 }
 
+function redoCurrentLetter() {
+    const letter = COLLECT_LETTERS[collectIndex];
+    collectSamples = collectSamples.filter(s => s.label !== letter);
+    updateCollectUI();
+    showToast(`Cleared samples for ${letter}`);
+}
+
+function deleteLastSample() {
+    const letter = COLLECT_LETTERS[collectIndex];
+    // Find and remove the last sample belonging to the current letter
+    for (let i = collectSamples.length - 1; i >= 0; i--) {
+        if (collectSamples[i].label === letter) {
+            collectSamples.splice(i, 1);
+            updateCollectUI();
+            showToast(`Deleted last sample for ${letter}`);
+            return;
+        }
+    }
+    showToast(`No samples for ${letter} to delete`);
+}
+
+function flashSampleCapture() {
+    const container = document.getElementById('cameraContainer');
+    if (!container) return;
+    container.classList.remove('collect-flash');
+    // Force reflow so the animation restarts even on rapid successive presses
+    void container.offsetWidth;
+    container.classList.add('collect-flash');
+    container.addEventListener('animationend', () => container.classList.remove('collect-flash'), { once: true });
+}
+
 function recordSample() {
     if (!currentRawLandmarks) { showToast('No hand detected'); return; }
-    const letter  = COLLECT_LETTERS[collectIndex];
-    const count   = collectCurrentLetterSamplesCount();
+    const letter = COLLECT_LETTERS[collectIndex];
+    const count = collectCurrentLetterSamplesCount();
     if (count >= SAMPLES_PER_LETTER) { showToast(`${letter} already has ${SAMPLES_PER_LETTER} samples`); return; }
 
     const wrist = currentRawLandmarks[0];
-    const flat  = [];
+    const flat = [];
     for (let i = 0; i < 21; i++) {
         flat.push(currentRawLandmarks[i].x - wrist.x);
         flat.push(currentRawLandmarks[i].y - wrist.y);
@@ -371,26 +425,27 @@ function recordSample() {
 
     collectSamples.push({ label: letter, values });
     updateCollectUI();
+    flashSampleCapture();
     showToast(`${letter}: ${count + 1}/${SAMPLES_PER_LETTER}`);
 }
 
 function downloadCSV() {
     if (collectSamples.length === 0) { showToast('No samples collected'); return; }
     const header = ['label', ...Array.from({ length: 21 }, (_, i) => [`x${i}`, `y${i}`]).flat()].join(',');
-    const rows   = collectSamples.map(s => [s.label, ...s.values.map(v => v.toFixed(6))].join(','));
-    const csv    = [header, ...rows].join('\n');
-    const blob   = new Blob([csv], { type: 'text/csv' });
-    const url    = URL.createObjectURL(blob);
-    const a      = document.createElement('a');
-    a.href       = url;
-    a.download   = 'training_data.csv';
+    const rows = collectSamples.map(s => [s.label, ...s.values.map(v => v.toFixed(6))].join(','));
+    const csv = [header, ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'training_data.csv';
     a.click();
     URL.revokeObjectURL(url);
     showToast(`Downloaded ${collectSamples.length} samples`);
 }
 
 function startCollectMode() {
-    collectMode  = true;
+    collectMode = true;
     collectIndex = 0;
     if (!collectOverlay) {
         collectOverlay = buildCollectOverlay();
@@ -459,8 +514,8 @@ function classifyLandmarks(landmarks) {
         const classIndex = values.indexOf(Math.max(...values));
         const confidence = values[classIndex];
 
-        const LABELS = ['A','B','C','D','E','F','G','H','I','J','K','L','M',
-                        'N','O','P','Q','R','S','T','U','V','W','X','Y','Z'];
+        const LABELS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+            'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
 
         return { letter: LABELS[classIndex], confidence, allScores: Array.from(values) };
     });
@@ -542,8 +597,8 @@ async function onResults(results) {
     if (debugContent) {
         const _top3Str = classResult && classResult.allScores
             ? (() => {
-                const _L = ['A','B','C','D','E','F','G','H','I','J','K','L','M',
-                            'N','O','P','Q','R','S','T','U','V','W','X','Y','Z'];
+                const _L = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+                    'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
                 return classResult.allScores
                     .map((v, i) => ({ letter: _L[i], score: v }))
                     .sort((a, b) => b.score - a.score)
