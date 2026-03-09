@@ -42,7 +42,7 @@ cd vesigna
 python3 -m http.server 3000
 
 # 3. Open in Chrome
-# http://localhost:3000/hands.html
+http://localhost:3000/hands.html
 ```
 
 > Chrome is recommended. Safari has known issues with the MediaPipe camera utilities. Allow camera access when prompted.
