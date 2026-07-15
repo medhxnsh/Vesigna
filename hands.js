@@ -12,13 +12,54 @@ const LABELS = [
     'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
 ];
 
-// ─── Mish activation (not natively supported by tfjs) ────────────────
+// ─── Confidence/ambiguity gating ─────────────────────────────────────
 
-function mish(x) {
-    return tf.tidy(() => {
-        const softplus = tf.log(tf.add(tf.exp(x), tf.scalar(1)));
-        return tf.mul(x, tf.tanh(softplus));
-    });
+const BASE_THRESHOLD = 0.5;
+const HYSTERESIS_THRESHOLD = 0.35;
+const AMBIG_MARGIN = 0.15;
+const LETTER_THRESHOLDS = {
+    B: 0.65,
+    E: 0.65,
+    M: 0.65,
+    N: 0.65,
+    U: 0.65,
+    V: 0.65,
+};
+const CONFUSABLE_PAIRS = new Set(['B|E', 'M|N', 'U|V']);
+
+function pairKey(a, b) {
+    return [a, b].sort().join('|');
+}
+
+function isConfusablePair(a, b) {
+    if (!a || !b) return false;
+    return CONFUSABLE_PAIRS.has(pairKey(a, b));
+}
+
+function getTop2(scores) {
+    let best1 = { i: -1, v: -Infinity };
+    let best2 = { i: -1, v: -Infinity };
+
+    for (let i = 0; i < scores.length; i++) {
+        const v = scores[i];
+        if (v > best1.v) {
+            best2 = best1;
+            best1 = { i, v };
+        } else if (v > best2.v) {
+            best2 = { i, v };
+        }
+    }
+
+    return {
+        top1: { label: LABELS[best1.i], score: best1.v, index: best1.i },
+        top2: { label: LABELS[best2.i], score: best2.v, index: best2.i },
+    };
+}
+
+function scoreToStability(score) {
+    if (score >= 0.75) return 'high';
+    if (score >= 0.6) return 'medium';
+    return 'low';
 }
 
 // ─── DOM elements ────────────────────────────────────────────────────
@@ -478,47 +519,11 @@ function classifyLandmarks(landmarks) {
     const normalized = flat.map(v => v / maxVal);
 
     return tf.tidy(() => {
-        let x = tf.tensor2d([normalized]);
-
-        // Get weights by name
-        const weights = {};
-        for (const layer of model.layers) {
-            const w = layer.getWeights();
-            if (w.length > 0) weights[layer.name] = w;
-        }
-
-        // BatchNorm
-        const bn = weights['batch_normalization'] || weights['bn'];
-        if (bn) {
-            const [gamma, beta, mean, variance] = bn;
-            x = tf.add(
-                tf.mul(gamma, tf.div(tf.sub(x, mean), tf.sqrt(tf.add(variance, tf.scalar(0.001))))),
-                beta
-            );
-        }
-
-        // Dense 0 → mish
-        const d0 = weights['dense'] || weights['d0'];
-        if (d0) x = mish(tf.add(tf.matMul(x, d0[0]), d0[1]));
-
-        // Dense 1 → mish
-        const d1 = weights['dense_1'] || weights['d1'];
-        if (d1) x = mish(tf.add(tf.matMul(x, d1[0]), d1[1]));
-
-        // Dense 2 → mish
-        const d2 = weights['dense_2'] || weights['d2'];
-        if (d2) x = mish(tf.add(tf.matMul(x, d2[0]), d2[1]));
-
-        // Dense 3 → softmax
-        const d3 = weights['dense_3'] || weights['d3'];
-        if (d3) x = tf.softmax(tf.add(tf.matMul(x, d3[0]), d3[1]));
-
-        const values = x.dataSync();
+        const input = tf.tensor2d([normalized]);
+        const output = model.predict(input);
+        const values = output.dataSync();
         const classIndex = values.indexOf(Math.max(...values));
         const confidence = values[classIndex];
-
-        const LABELS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
-            'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
 
         return { letter: LABELS[classIndex], confidence, allScores: Array.from(values) };
     });
@@ -563,16 +568,42 @@ async function onResults(results) {
             radius: 4,
         });
 
-        // Classify using the original (unflipped) landmarks; apply hysteresis
+        // Classify using the original (unflipped) landmarks and reject ambiguous top-2 pairs.
         const raw = classifyLandmarks(rawLandmarks);
-        if (raw.confidence >= 0.5) {
-            lastDetectedLetter = raw.letter;
-            classResult = raw;
-        } else if (raw.confidence >= 0.35 && raw.letter === lastDetectedLetter) {
-            classResult = { ...raw, letter: lastDetectedLetter };
+        const { top1, top2 } = getTop2(raw.allScores);
+        const margin = top1.score - top2.score;
+        const required = LETTER_THRESHOLDS[top1.label] ?? BASE_THRESHOLD;
+        const confusable = isConfusablePair(top1.label, top2.label);
+        const marginNeeded = confusable ? AMBIG_MARGIN : 0.1;
+
+        // J/Z are motion letters in this app; avoid static commits until motion tracker is wired in.
+        const staticBlocked = top1.label === 'J' || top1.label === 'Z';
+        const strongAccept = !staticBlocked && top1.score >= required && margin >= marginNeeded;
+        const stickyAccept =
+            !staticBlocked
+            && top1.label === lastDetectedLetter
+            && top1.score >= HYSTERESIS_THRESHOLD
+            && margin >= marginNeeded * 0.6;
+
+        if (strongAccept || stickyAccept) {
+            lastDetectedLetter = top1.label;
+            classResult = {
+                ...raw,
+                letter: top1.label,
+                confidence: top1.score,
+                stability: scoreToStability(top1.score),
+                top2,
+                margin,
+            };
         } else {
             lastDetectedLetter = null;
-            classResult = { ...raw, letter: null };
+            classResult = {
+                ...raw,
+                letter: null,
+                stability: 'none',
+                top2,
+                margin,
+            };
         }
     }
 
@@ -615,7 +646,8 @@ async function onResults(results) {
             `── TF MODEL (A-Z) ───────────────\n` +
             `Predicted:  ${classResult?.letter ?? '—'}\n` +
             `Confidence: ${classResult ? (classResult.confidence * 100).toFixed(1) + '%' : '—'}\n` +
-            `Threshold:  50% / hysteresis 35%\n` +
+            `Threshold:  base ${(BASE_THRESHOLD * 100).toFixed(0)}% / hysteresis ${(HYSTERESIS_THRESHOLD * 100).toFixed(0)}%\n` +
+            `Margin:     ${classResult && classResult.margin != null ? (classResult.margin * 100).toFixed(1) + '%' : '—'}\n` +
             `\n── TOP 3 PREDICTIONS ────────────\n` +
             _top3Str + '\n' +
             `\n── LANDMARKS ────────────────────\n` +
@@ -629,7 +661,7 @@ async function onResults(results) {
     // ─── Feed stabilizer → sentence builder ───────────────────────────
     stabilizer.update({
         letter: classResult ? classResult.letter : null,
-        confidence: classResult ? 'high' : 'none',
+        confidence: classResult ? (classResult.stability || 'none') : 'none',
     });
 
     // ─── Sync reference modal highlight ───────────────────────────────
